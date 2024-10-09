@@ -1,0 +1,71 @@
+---
+- name: Setup Kubernetes and CRI-O on CentOS 9
+  hosts: myservers
+  become: yes
+  vars:
+    KUBERNETES_VERSION: v1.30
+    CRIO_VERSION: v1.30
+
+  tasks:
+    - name: Create Kubernetes repo
+      ansible.builtin.copy:
+        dest: /etc/yum.repos.d/kubernetes.repo
+        content: |
+          [kubernetes]
+          name=Kubernetes
+          baseurl=https://pkgs.k8s.io/core:/stable:/{{ KUBERNETES_VERSION }}/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://pkgs.k8s.io/core:/stable:/{{ KUBERNETES_VERSION }}/rpm/repodata/repomd.xml.key
+
+    - name: Create CRI-O repo
+      ansible.builtin.copy:
+        dest: /etc/yum.repos.d/cri-o.repo
+        content: |
+          [cri-o]
+          name=CRI-O
+          baseurl=https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ CRIO_VERSION }}/rpm/
+          enabled=1
+          gpgcheck=1
+          gpgkey=https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ CRIO_VERSION }}/rpm/repodata/repomd.xml.key
+
+    - name: Install container-selinux
+      ansible.builtin.dnf:
+        name: container-selinux
+        state: present
+
+    - name: Install CRI-O, kubelet, kubeadm, and kubectl
+      ansible.builtin.dnf:
+        name:
+          - cri-o
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Start CRI-O service
+      ansible.builtin.systemd:
+        name: crio
+        state: started
+        enabled: true
+
+    - name: Disable swap
+      ansible.builtin.command:
+        cmd: swapoff -a
+
+    - name: Load br_netfilter module
+      ansible.builtin.command:
+        cmd: modprobe br_netfilter
+
+    - name: Enable IP forwarding
+      ansible.builtin.sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        sysctl_set: yes
+
+    - name: Ensure Kubernetes services are enabled
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: true
+
